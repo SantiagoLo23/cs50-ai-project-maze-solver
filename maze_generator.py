@@ -1,11 +1,14 @@
+# maze_generator.py
+
 import random
-import time
+from collections import deque
 
 class MazeGenerator:
-    def __init__(self, width, height):
+    def __init__(self, width, height, multiple_solutions=False):
         # Ensure odd dimensions for proper maze structure
         self.width = width if width % 2 == 1 else width + 1
         self.height = height if height % 2 == 1 else height + 1
+        self.multiple_solutions = multiple_solutions
         self.maze = None
 
     def wilson_algorithm_generator(self):
@@ -25,7 +28,6 @@ class MazeGenerator:
             current = random.choice(remaining_cells)
             path = [current]
             yield maze, "walk_start", current
-            time.sleep(0.05)
 
             steps = 0
             max_steps = 1000
@@ -50,23 +52,22 @@ class MazeGenerator:
 
                 current = next_cell
                 yield maze, "walking", path.copy()
-                time.sleep(0.03)
 
-            for i in range(len(path) - 1):
-                r1, c1 = path[i]
-                r2, c2 = path[i + 1]
-                maze[r1][c1] = ' '
-                in_maze.add((r1, c1))
-                wall_r = (r1 + r2) // 2
-                wall_c = (c1 + c2) // 2
-                maze[wall_r][wall_c] = ' '
-                yield maze, "adding_path", (r1, c1)
-                time.sleep(0.02)
-
-            if path:
-                final_r, final_c = path[-1]
-                maze[final_r][final_c] = ' '
-                in_maze.add((final_r, final_c))
+            # Connect the entire path to the existing maze
+            for i in range(len(path)):
+                r, c = path[i]
+                maze[r][c] = ' '
+                in_maze.add((r, c))
+                
+                # Connect to next cell in path
+                if i < len(path) - 1:
+                    r1, c1 = path[i]
+                    r2, c2 = path[i + 1]
+                    wall_r = (r1 + r2) // 2
+                    wall_c = (c1 + c2) // 2
+                    maze[wall_r][wall_c] = ' '
+                
+                yield maze, "adding_path", (r, c)
 
             remaining_cells = [cell for cell in all_cells if cell not in in_maze]
             yield maze, "path_complete", None
@@ -74,22 +75,109 @@ class MazeGenerator:
         # Add start
         maze[1][1] = 'A'
 
-        # Safe goal placement
-        def place_goal(maze, width, height):
-            start_pos = (1, 1)
-            for r in range(height - 2, 0, -2):
-                for c in range(width - 2, 0, -2):
-                    if maze[r][c] == ' ' and (r, c) != start_pos:
-                        maze[r][c] = 'B'
-                        return True
-            for r in range(height - 2, 0, -1):
-                for c in range(width - 2, 0, -1):
-                    if maze[r][c] == ' ' and (r, c) != start_pos:
-                        maze[r][c] = 'B'
-                        return True
-            return False
+        # Safe goal placement with connectivity verification
+        goal_placed = self.place_connected_goal(maze)
+        
+        if not goal_placed:
+            # Fallback: place goal at furthest reachable point from start
+            furthest_cell = self.find_furthest_cell(maze, (1, 1))
+            if furthest_cell and furthest_cell != (1, 1):
+                maze[furthest_cell[0]][furthest_cell[1]] = 'B'
 
-        place_goal(maze, self.width, self.height)
+        # Add multiple solutions if requested
+        if self.multiple_solutions:
+            self.add_multiple_paths(maze)
 
         self.maze = maze
         yield maze, "complete", None
+    
+    def place_connected_goal(self, maze):
+        """Place goal ensuring it's connected to start using BFS verification"""
+        start_pos = (1, 1)
+        
+        # Get all reachable positions from start
+        reachable = self.get_reachable_positions(maze, start_pos)
+        
+        # Try to place goal in bottom-right area first
+        for r in range(self.height - 2, 0, -2):
+            for c in range(self.width - 2, 0, -2):
+                if (r, c) in reachable and (r, c) != start_pos:
+                    maze[r][c] = 'B'
+                    return True
+        
+        # Try any reachable position
+        for r in range(self.height - 2, 0, -1):
+            for c in range(self.width - 2, 0, -1):
+                if (r, c) in reachable and (r, c) != start_pos:
+                    maze[r][c] = 'B'
+                    return True
+        
+        return False
+
+    def get_reachable_positions(self, maze, start):
+        """Get all positions reachable from start using BFS"""
+        visited = set()
+        queue = deque([start])
+        visited.add(start)
+        
+        while queue:
+            r, c = queue.popleft()
+            
+            for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                nr, nc = r + dr, c + dc
+                if (0 <= nr < self.height and 0 <= nc < self.width and 
+                    (nr, nc) not in visited and maze[nr][nc] != '#'):
+                    visited.add((nr, nc))
+                    queue.append((nr, nc))
+        
+        return visited
+
+    def find_furthest_cell(self, maze, start):
+        """Find the cell furthest from start using BFS"""
+        visited = set()
+        queue = deque([(start, 0)])  # (position, distance)
+        visited.add(start)
+        furthest_cell = start
+        max_distance = 0
+        
+        while queue:
+            (r, c), distance = queue.popleft()
+            
+            if distance > max_distance:
+                max_distance = distance
+                furthest_cell = (r, c)
+            
+            for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                nr, nc = r + dr, c + dc
+                if (0 <= nr < self.height and 0 <= nc < self.width and 
+                    (nr, nc) not in visited and maze[nr][nc] != '#'):
+                    visited.add((nr, nc))
+                    queue.append(((nr, nc), distance + 1))
+        
+        return furthest_cell
+
+    def add_multiple_paths(self, maze):
+        """Add additional connections to create multiple solution paths"""
+        # Find some walls between open spaces and randomly remove some
+        walls_to_remove = []
+        
+        for r in range(2, self.height - 1, 2):
+            for c in range(1, self.width - 1, 2):
+                # Horizontal wall
+                if (maze[r-1][c] == ' ' and maze[r+1][c] == ' ' and 
+                    maze[r][c] == '#'):
+                    walls_to_remove.append((r, c))
+        
+        for r in range(1, self.height - 1, 2):
+            for c in range(2, self.width - 1, 2):
+                # Vertical wall  
+                if (maze[r][c-1] == ' ' and maze[r][c+1] == ' ' and 
+                    maze[r][c] == '#'):
+                    walls_to_remove.append((r, c))
+        
+        # Remove 10-20% of possible walls to create cycles
+        num_to_remove = len(walls_to_remove) // 8  # Remove about 12.5%
+        if num_to_remove > 0:
+            walls_to_remove = random.sample(walls_to_remove, num_to_remove)
+            for r, c in walls_to_remove:
+                maze[r][c] = ' '
