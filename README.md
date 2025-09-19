@@ -51,14 +51,15 @@ FPS = 30                  # Frame rate for smooth animation
 ### Menu Screen
 - **G** - Generate new maze
 - **Q** - Quit application
+- **M** - Multiple solutions
 
 ### After Generation
 - **S** - Start solving with all algorithms
 - **G** - Generate another maze
 - **Q** - Quit application
 
-### During Solving
-- **G** - Generate new maze
+### After/During Solving
+- **R** - Return to main menu
 - **Q** - Quit application
 
 ## How to Run
@@ -80,7 +81,7 @@ python main.py
 1. Start application → Main menu appears
 2. Press **G** → Watch Wilson's Algorithm generate maze
 3. Press **S** → Watch all four algorithms solve simultaneously
-4. Press **G** anytime → Generate new maze to test different scenarios
+4. Press **R** anytime → Return to main menu
 
 ## Technical Details
 
@@ -117,3 +118,4 @@ This project demonstrates:
 - Toggle between single/multiple solution modes to test algorithm optimality
 - Adjust frame rate for different visualization speeds
 - Experiment with different heuristics in the A* implementation
+
