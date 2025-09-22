@@ -5,10 +5,10 @@ from maze_generator import MazeGenerator
 from maze_solver import Maze, StackFrontier, QueueFrontier, GreedyBestFirstFrontier, AStarFrontier
 
 # Maze configuration
-MAZE_WIDTH = 41
-MAZE_HEIGHT = 31
+MAZE_WIDTH = 51
+MAZE_HEIGHT = 41
 MARGIN = 10
-FPS = 30
+FPS = 144
 
 # UI States
 STATE_MENU = "menu"
@@ -77,6 +77,11 @@ class Visualizer:
             "G - Generate New Maze",
             "M - Toggle Multiple Solutions",
             "Q - Quit",
+            "",
+            "After generation:",
+            "S - Start Solving",
+            "G - Generate Another Maze",
+            "",
             "During/After solving:",
             "R - Return to Menu"
         ]
@@ -115,20 +120,31 @@ class Visualizer:
         # Completion message
         complete_text = self.menu_font.render("All Algorithms Completed!", True, (0, 255, 0))
         complete_x = (self.screen_width - complete_text.get_width()) // 2
-        self.screen.blit(complete_text, (complete_x, self.screen_height - 120))
+        complete_y = (self.screen_height- complete_text.get_height()) // 2
+        self.screen.blit(complete_text, (complete_x, complete_y))
         
-        # Mode display
+        
+        # Instructions for solving phase (right below the completion message)
         mode_text = f"Mode: {'Multiple Solutions' if self.multiple_solutions else 'Single Solution'}"
-        mode_surface = self.title_font.render(mode_text, True, (255, 255, 0))
+        mode_surface = self.stats_font.render(mode_text, True, (255, 255, 0))
         mode_x = (self.screen_width - mode_surface.get_width()) // 2
-        self.screen.blit(mode_surface, (mode_x, self.screen_height - 90))
+        mode_y = complete_y + complete_text.get_height() + 10  # 10 pixels spacing
+        self.screen.blit(mode_surface, (mode_x, mode_y))
+
         
+
         # Instructions
-        controls_text1 = self.title_font.render("Press R to return to menu", True, (255, 255, 255))
-        controls_text2 = self.title_font.render("Press Q to quit", True, (255, 255, 255))
-        controls_x = (self.screen_width - controls_text1.get_width()) // 2
-        self.screen.blit(controls_text1, (controls_x, self.screen_height - 60))
-        self.screen.blit(controls_text2, (controls_x, self.screen_height - 30))
+        line1 = self.title_font.render("Press R to return to menu", True, (255, 255, 255))
+        line2 = self.title_font.render("Press Q to quit", True, (255, 255, 255))
+
+        # Center both lines horizontally
+        line1_x = (self.screen_width - line1.get_width()) // 2
+        line2_x = (self.screen_width - line2.get_width()) // 2
+
+        # Blit with vertical spacing
+        self.screen.blit(line1, (line1_x, self.screen_height - 100))  # Adjust Y as needed
+        self.screen.blit(line2, (line2_x, self.screen_height - 80))
+
 
     def draw_ready_screen(self):
         """Draw the ready to solve screen"""
@@ -255,92 +271,104 @@ class Visualizer:
     def run(self):
         running = True
         
-        while running:
-            self.clock.tick(FPS)
-            
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_q:
+        try:
+            while running:
+                self.clock.tick(FPS)
+                
+                # Safe event handling
+                try:
+                    events = pygame.event.get()
+                except Exception as e:
+                    print(f"Pygame event error: {e}")
+                    pygame.event.clear()
+                    events = []
+                
+                for event in events:
+                    if event.type == pygame.QUIT:
                         running = False
-                    elif event.key == pygame.K_m:
-                        # Toggle multiple solutions (only in menu)
-                        if self.state == STATE_MENU:
-                            self.multiple_solutions = not self.multiple_solutions
-                            print(f"Multiple solutions: {'Enabled' if self.multiple_solutions else 'Disabled'}")
-                    elif event.key == pygame.K_g:
-                        if self.state in [STATE_MENU, STATE_READY_TO_SOLVE]:
-                            self.state = STATE_GENERATING
-                            print("Starting maze generation...")
-                            self.maze_data = self.generate_maze()
-                            if self.maze_data:
-                                self.state = STATE_READY_TO_SOLVE
-                                print("Maze generation complete! Press S to solve or G for new maze.")
-                            else:
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_q:
+                            running = False
+                        elif event.key == pygame.K_m:
+                            # Toggle multiple solutions (only in menu)
+                            if self.state == STATE_MENU:
+                                self.multiple_solutions = not self.multiple_solutions
+                                print(f"Multiple solutions: {'Enabled' if self.multiple_solutions else 'Disabled'}")
+                        elif event.key == pygame.K_g:
+                            if self.state in [STATE_MENU, STATE_READY_TO_SOLVE]:
+                                self.state = STATE_GENERATING
+                                print("Starting maze generation...")
+                                self.maze_data = self.generate_maze()
+                                if self.maze_data:
+                                    self.state = STATE_READY_TO_SOLVE
+                                    print("Maze generation complete! Press S to solve or G for new maze.")
+                                else:
+                                    self.state = STATE_MENU
+                        elif event.key == pygame.K_s:
+                            if self.state == STATE_READY_TO_SOLVE and self.maze_data:
+                                print("Starting solving phase...")
+                                self.initialize_mazes(self.maze_data)
+                                self.state = STATE_SOLVING
+                                self.all_solved = False
+                        elif event.key == pygame.K_r:
+                            # Return to menu (from solved state or during solving)
+                            if self.state in [STATE_SOLVING, STATE_SOLVED]:
                                 self.state = STATE_MENU
-                    elif event.key == pygame.K_s:
-                        if self.state == STATE_READY_TO_SOLVE and self.maze_data:
-                            print("Starting solving phase...")
-                            self.initialize_mazes(self.maze_data)
-                            self.state = STATE_SOLVING
-                            self.all_solved = False
-                    elif event.key == pygame.K_r:
-                        # Return to menu (from solved state or during solving)
-                        if self.state in [STATE_SOLVING, STATE_SOLVED]:
-                            self.state = STATE_MENU
-                            self.maze_data = None
-                            self.all_solved = False
-                            print("Returned to main menu")
-            
-            # Draw based on current state
-            if self.state == STATE_MENU:
-                self.draw_menu()
-            elif self.state == STATE_READY_TO_SOLVE:
-                self.draw_ready_screen()
-            elif self.state == STATE_SOLVING:
-                self.screen.fill((0, 0, 0))
+                                self.maze_data = None
+                                self.all_solved = False
+                                print("Returned to main menu")
                 
-                solved_count = 0
+                # Draw based on current state
+                if self.state == STATE_MENU:
+                    self.draw_menu()
+                elif self.state == STATE_READY_TO_SOLVE:
+                    self.draw_ready_screen()
+                elif self.state == STATE_SOLVING:
+                    self.screen.fill((0, 0, 0))
+                    
+                    solved_count = 0
+                    
+                    for i, (maze, gen, title) in enumerate(zip(self.mazes, self.generators, self.titles)):
+                        col = i % 2
+                        row = i // 2
+
+                        maze_pixel_width = maze.width * self.cell_size
+                        maze_pixel_height = maze.height * self.cell_size
+
+                        offset_x = col * self.screen_width // 2 + (self.quadrant_width - maze_pixel_width) // 2
+                        offset_y = row * self.screen_height // 2 + (self.quadrant_height - maze_pixel_height) // 2
+
+                        try:
+                            status, state = next(gen)
+                            if status == "exploring":
+                                maze.explored.add(state)
+                        except StopIteration:
+                            solved_count += 1
+
+                        self.draw_maze_solving(maze, offset_x, offset_y, title)
+
+                    # Check if all algorithms are done
+                    if solved_count == 4 and not self.all_solved:
+                        self.all_solved = True
+                        self.state = STATE_SOLVED
+                        print("All algorithms completed! Press R to return to menu.")
+
+                    # Instructions for solving phase
+                    mode_text = f"Mode: {'Multiple Solutions' if self.multiple_solutions else 'Single Solution'}"
+                    mode_surface = self.stats_font.render(mode_text, True, (255, 255, 0))
+                    self.screen.blit(mode_surface, (10, 10))
+                    
+                    inst_text = self.stats_font.render("Press R to return to menu, Q to quit", True, (200, 200, 200))
+                    self.screen.blit(inst_text, (10, 35))
                 
-                for i, (maze, gen, title) in enumerate(zip(self.mazes, self.generators, self.titles)):
-                    col = i % 2
-                    row = i // 2
-
-                    maze_pixel_width = maze.width * self.cell_size
-                    maze_pixel_height = maze.height * self.cell_size
-
-                    offset_x = col * self.screen_width // 2 + (self.quadrant_width - maze_pixel_width) // 2
-                    offset_y = row * self.screen_height // 2 + (self.quadrant_height - maze_pixel_height) // 2
-
-                    try:
-                        status, state = next(gen)
-                        if status == "exploring":
-                            maze.explored.add(state)
-                    except StopIteration:
-                        solved_count += 1
-
-                    self.draw_maze_solving(maze, offset_x, offset_y, title)
-
-                # Check if all algorithms are done
-                if solved_count == 4 and not self.all_solved:
-                    self.all_solved = True
-                    self.state = STATE_SOLVED
-                    print("All algorithms completed! Press R to return to menu.")
-
-                # Instructions for solving phase
-                mode_text = f"Mode: {'Multiple Solutions' if self.multiple_solutions else 'Single Solution'}"
-                mode_surface = self.stats_font.render(mode_text, True, (255, 255, 0))
-                self.screen.blit(mode_surface, (10, 10))
+                elif self.state == STATE_SOLVED:
+                    self.draw_solved_screen()
                 
-                inst_text = self.stats_font.render("Press R to return to menu, Q to quit", True, (200, 200, 200))
-                self.screen.blit(inst_text, (10, 35))
-            
-            elif self.state == STATE_SOLVED:
-                self.draw_solved_screen()
-            
-            # Note: STATE_GENERATING is handled by the generate_maze method
-            
-            pygame.display.flip()
-
-        pygame.quit()
+                # Note: STATE_GENERATING is handled by the generate_maze method
+                
+                pygame.display.flip()
+        
+        except Exception as e:
+            print(f"Critical error in main loop: {e}")
+        finally:
+            pygame.quit()
